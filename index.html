@@ -336,11 +336,24 @@ function getSlotColor(startStr) {
   const todayM = now.getMonth();
   const todayD = now.getDate();
 
-  const datePart = String(startStr).split(' ')[0].trim();
-  const parts    = datePart.split('/');
-  const slotY    = parseInt(parts[0], 10);
-  const slotM    = parseInt(parts[1], 10) - 1;
-  const slotD    = parseInt(parts[2], 10);
+  let slotY, slotM, slotD;
+  const s = String(startStr);
+
+  if (s.includes('T') || (s.includes('-') && !s.includes('/'))) {
+    // UTC形式（2026-04-14T14:00:00.000Z）→ 日本時間に変換
+    const d   = new Date(s);
+    const jst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+    slotY = jst.getUTCFullYear();
+    slotM = jst.getUTCMonth();
+    slotD = jst.getUTCDate();
+  } else {
+    // 通常形式（2026/04/14 23:00）
+    const datePart = s.split(' ')[0].trim();
+    const parts    = datePart.split('/');
+    slotY = parseInt(parts[0], 10);
+    slotM = parseInt(parts[1], 10) - 1;
+    slotD = parseInt(parts[2], 10);
+  }
 
   const diffDays = Math.round(
     (new Date(slotY, slotM, slotD) - new Date(todayY, todayM, todayD)) / 86400000
