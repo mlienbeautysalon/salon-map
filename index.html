@@ -19,36 +19,51 @@
   }
   .header-title { font-size: 16px; font-weight: 700; color: var(--gold); }
   .header-sub { font-size: 11px; color: rgba(255,255,255,0.4); margin-top: 2px; }
+  .header-right { display: flex; gap: 8px; align-items: center; }
   .refresh-btn {
     background: rgba(201,169,110,0.2); border: 1px solid rgba(201,169,110,0.4);
     color: var(--gold); font-size: 12px; padding: 6px 12px;
-    border-radius: 20px; cursor: pointer;
+    border-radius: 20px; cursor: pointer; white-space: nowrap;
   }
-  #map { width: 100%; height: 52vw; max-height: 320px; }
+  .search-bar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 16px; background: var(--white);
+    border-bottom: 1px solid var(--border);
+  }
+  .search-input {
+    flex: 1; border: 1.5px solid var(--border); border-radius: 20px;
+    padding: 8px 16px; font-size: 14px; font-family: inherit;
+    outline: none; color: var(--text); background: var(--white);
+  }
+  .search-input:focus { border-color: var(--gold); }
+  .location-btn {
+    background: var(--gold); border: none; color: var(--black);
+    width: 36px; height: 36px; border-radius: 50%;
+    font-size: 16px; cursor: pointer; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #map { width: 100%; height: 52vw; max-height: 300px; }
   .section-title {
     padding: 16px 16px 8px; font-size: 12px; font-weight: 700;
     letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted);
   }
   .slot-list { padding: 0 12px 100px; display: flex; flex-direction: column; gap: 10px; }
-  .slot-card {
-    background: var(--white); border-radius: 12px;
-    overflow: hidden; border: 1.5px solid transparent;
-  }
+  .slot-card { background: var(--white); border-radius: 12px; overflow: hidden; border: 1.5px solid transparent; }
   .slot-card-inner { display: flex; align-items: stretch; }
-  .slot-accent { width: 5px; background: var(--gold); flex-shrink: 0; }
+  .slot-accent { width: 5px; flex-shrink: 0; }
   .slot-body {
     flex: 1; padding: 14px 14px 14px 16px;
     display: flex; align-items: center; justify-content: space-between; gap: 12px;
   }
   .slot-info { flex: 1; }
+  .slot-salon { font-size: 11px; color: var(--gold); font-weight: 700; margin-bottom: 2px; }
   .slot-datetime { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 3px; }
   .slot-menu { font-size: 12px; color: var(--muted); }
   .slot-right { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
   .slot-price { font-size: 16px; font-weight: 700; color: var(--gold); }
   .book-btn {
-    background: var(--gold); color: var(--black); border: none;
-    padding: 8px 16px; border-radius: 20px; font-size: 12px;
-    font-weight: 700; cursor: pointer; white-space: nowrap;
+    color: var(--black); border: none; padding: 8px 16px;
+    border-radius: 20px; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap;
   }
   .empty-state { text-align: center; padding: 60px 20px; color: var(--muted); }
   .empty-icon { font-size: 40px; margin-bottom: 12px; }
@@ -86,7 +101,7 @@
   .form-input {
     width: 100%; border: 1.5px solid var(--border); border-radius: 8px;
     padding: 12px 14px; font-size: 15px; color: var(--text);
-    outline: none; -webkit-appearance: none; background: var(--white); font-family: inherit;
+    outline: none; background: var(--white); font-family: inherit;
   }
   .form-input:focus { border-color: var(--gold); }
   .confirm-btn {
@@ -104,12 +119,20 @@
     <div class="header-title">空き枠マップ</div>
     <div class="header-sub" id="lastUpdated">読み込み中...</div>
   </div>
-  <button class="refresh-btn" onclick="loadSlots()">更新</button>
+  <div class="header-right">
+    <button class="refresh-btn" onclick="loadSlots()">更新</button>
+  </div>
+</div>
+
+<div class="search-bar">
+  <input class="search-input" type="text" id="searchInput"
+    placeholder="エリアを検索（例：渋谷、横浜）"
+    onkeydown="if(event.key==='Enter')searchArea()">
+  <button class="location-btn" onclick="goToCurrentLocation()" title="現在地">📍</button>
 </div>
 
 <div id="map"></div>
-
-<div class="section-title">今日の空き枠</div>
+<div class="section-title">空き枠一覧</div>
 <div class="slot-list" id="slotList">
   <div class="loading"><div class="spinner"></div>空き枠を取得中...</div>
 </div>
@@ -118,8 +141,9 @@
   <div class="modal">
     <div class="modal-handle"></div>
     <div class="modal-title">予約する</div>
-    <div class="modal-sub" id="modalSalonName"></div>
+    <div class="modal-sub">予約内容の確認</div>
     <div class="modal-summary">
+      <div class="modal-row"><span class="label">サロン</span><span class="value" id="modalSalon">-</span></div>
       <div class="modal-row"><span class="label">日時</span><span class="value" id="modalDatetime">-</span></div>
       <div class="modal-row"><span class="label">メニュー</span><span class="value" id="modalMenu">-</span></div>
       <div class="modal-price" id="modalPrice">-</div>
@@ -139,41 +163,91 @@
 
 <script>
 const API_URL = 'https://script.google.com/macros/s/AKfycbzrhi-VWfs-Ipxp-6xcUh1hHZvsv-OwTv9YUFYfINMzREyYWGpROV0XigL5DvJ3ZSsj9g/exec';
-const SALON_NAME = 'bijou beauty';
-const SALON_LAT  = 35.6540984;
-const SALON_LNG  = 139.7353651;
-const SALON_ADDR = '美肌専門店 Bijou Beauté';
-let slots = [];
-let selectedSlot = null;
-let map, marker;
+
+const SALONS_CONFIG = [
+  {
+    id:   'salon_001',
+    name: 'bijou beauty',
+    lat:  35.6540984,
+    lng:  139.7353651,
+    addr: '美肌専門店 Bijou Beauté'
+  },
+  // 2店舗目はここに追加
+];
+
+let slots             = [];
+let selectedSlot      = null;
+let map;
+let geocoder;
+let currentLocationMarker = null;
 
 function initMap() {
   map = new google.maps.Map(document.getElementById('map'), {
-    center: { lat: SALON_LAT, lng: SALON_LNG },
-    zoom: 16,
+    center: { lat: 35.6540984, lng: 139.7353651 },
+    zoom: 13,
     disableDefaultUI: true,
     zoomControl: true,
     styles: [{ featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] }]
   });
-  marker = new google.maps.Marker({
-    position: { lat: SALON_LAT, lng: SALON_LNG },
+  geocoder = new google.maps.Geocoder();
+
+  // 位置情報を自動取得
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        const latlng = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        map.setCenter(latlng);
+        map.setZoom(13);
+        showCurrentLocationMarker(latlng);
+      },
+      () => {}
+    );
+  }
+
+  loadSlots();
+}
+
+function goToCurrentLocation() {
+  if (!navigator.geolocation) { alert('位置情報が使えません'); return; }
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      const latlng = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      map.setCenter(latlng);
+      map.setZoom(14);
+      showCurrentLocationMarker(latlng);
+    },
+    () => alert('位置情報を取得できませんでした。ブラウザの設定を確認してください。')
+  );
+}
+
+function showCurrentLocationMarker(latlng) {
+  if (currentLocationMarker) currentLocationMarker.setMap(null);
+  currentLocationMarker = new google.maps.Marker({
+    position: latlng,
     map,
-    title: SALON_NAME,
+    title: '現在地',
     icon: {
       path: google.maps.SymbolPath.CIRCLE,
-      scale: 14,
-      fillColor: '#C9A96E',
+      scale: 8,
+      fillColor: '#4285F4',
       fillOpacity: 1,
       strokeColor: '#FFFFFF',
-      strokeWeight: 3
+      strokeWeight: 2
     }
   });
-  const infoWindow = new google.maps.InfoWindow({
-    content: '<div style="font-size:13px;font-weight:700;padding:4px 8px;">' + SALON_NAME + '</div>' +
-             '<div style="font-size:12px;color:#666;padding:0 8px 4px;">' + SALON_ADDR + '</div>'
+}
+
+function searchArea() {
+  const query = document.getElementById('searchInput').value.trim();
+  if (!query) return;
+  geocoder.geocode({ address: query + ' 日本', language: 'ja' }, (results, status) => {
+    if (status === 'OK' && results[0]) {
+      map.setCenter(results[0].geometry.location);
+      map.setZoom(13);
+    } else {
+      alert('「' + query + '」が見つかりませんでした');
+    }
   });
-  marker.addListener('click', () => infoWindow.open(map, marker));
-  loadSlots();
 }
 
 async function loadSlots() {
@@ -192,39 +266,88 @@ async function loadSlots() {
     '最終更新 ' + now.getHours() + ':' + String(now.getMinutes()).padStart(2,'0');
 }
 
+function getSlotColor(startStr) {
+  const today    = new Date(); today.setHours(0,0,0,0);
+  const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
+  const parts    = String(startStr).replace(/\//g, '-').split(' ');
+  const slotDate = new Date(parts[0] + 'T00:00:00');
+  if (slotDate.getTime() === today.getTime())    return { color: '#E74C3C', label: '今日' };
+  if (slotDate.getTime() === tomorrow.getTime()) return { color: '#F39C12', label: '明日' };
+  return { color: '#2980B9', label: '明後日以降' };
+}
+
 function renderSlots() {
   const list = document.getElementById('slotList');
+
+  if (window._markers) window._markers.forEach(m => m.setMap(null));
+  window._markers = [];
+
+  SALONS_CONFIG.forEach(salon => {
+    const hasSlot = slots.some(s => s.salonId === salon.id);
+    const marker  = new google.maps.Marker({
+      position: { lat: salon.lat, lng: salon.lng },
+      map,
+      title: salon.name,
+      icon: {
+        path: google.maps.SymbolPath.CIRCLE,
+        scale: 14,
+        fillColor:   hasSlot ? '#C9A96E' : '#cccccc',
+        fillOpacity: 1,
+        strokeColor: '#FFFFFF',
+        strokeWeight: 3
+      }
+    });
+    const infoWindow = new google.maps.InfoWindow({
+      content:
+        '<div style="font-size:13px;font-weight:700;padding:4px 8px;">' + salon.name + '</div>' +
+        '<div style="font-size:12px;color:#666;padding:0 8px 4px;">' + salon.addr + '</div>' +
+        (hasSlot
+          ? '<div style="font-size:12px;color:#C9A96E;padding:0 8px 6px;">空き枠あり</div>'
+          : '<div style="font-size:12px;color:#ccc;padding:0 8px 6px;">空き枠なし</div>')
+    });
+    marker.addListener('click', () => infoWindow.open(map, marker));
+    window._markers.push(marker);
+  });
+
   if (slots.length === 0) {
     list.innerHTML =
       '<div class="empty-state"><div class="empty-icon">📅</div>' +
       '<div class="empty-text">現在空き枠はありません。<br>またのご確認をお待ちしています。</div></div>';
     return;
   }
-  list.innerHTML = slots.map((slot, i) =>
-    '<div class="slot-card" onclick="openModal(' + i + ')">' +
-      '<div class="slot-card-inner">' +
-        '<div class="slot-accent"></div>' +
-        '<div class="slot-body">' +
-          '<div class="slot-info">' +
-            '<div class="slot-datetime">' + escHtml(slot.display) + '</div>' +
-            '<div class="slot-menu">' + escHtml(slot.menu) + '</div>' +
-          '</div>' +
-          '<div class="slot-right">' +
-            '<div class="slot-price">' + escHtml(slot.price) + '</div>' +
-            '<button class="book-btn" onclick="openModal(' + i + ');event.stopPropagation()">予約する</button>' +
+
+  list.innerHTML = slots.map((slot, i) => {
+    const c = getSlotColor(slot.start);
+    return (
+      '<div class="slot-card" onclick="openModal(' + i + ')">' +
+        '<div class="slot-card-inner">' +
+          '<div class="slot-accent" style="background:' + c.color + '"></div>' +
+          '<div class="slot-body">' +
+            '<div class="slot-info">' +
+              '<span style="background:' + c.color + ';color:white;font-size:10px;font-weight:700;' +
+              'padding:2px 8px;border-radius:10px;margin-bottom:4px;display:inline-block;">' + c.label + '</span>' +
+              '<div class="slot-salon">' + escHtml(slot.salon) + '</div>' +
+              '<div class="slot-datetime">' + escHtml(slot.display) + '</div>' +
+              '<div class="slot-menu">' + escHtml(slot.menu) + '</div>' +
+            '</div>' +
+            '<div class="slot-right">' +
+              '<div class="slot-price">' + escHtml(slot.price) + '</div>' +
+              '<button class="book-btn" style="background:' + c.color + '" ' +
+              'onclick="openModal(' + i + ');event.stopPropagation()">予約する</button>' +
+            '</div>' +
           '</div>' +
         '</div>' +
-      '</div>' +
-    '</div>'
-  ).join('');
+      '</div>'
+    );
+  }).join('');
 }
 
 function openModal(index) {
   selectedSlot = slots[index];
-  document.getElementById('modalSalonName').textContent = SALON_NAME;
-  document.getElementById('modalDatetime').textContent  = selectedSlot.display;
-  document.getElementById('modalMenu').textContent      = selectedSlot.menu;
-  document.getElementById('modalPrice').textContent     = selectedSlot.price;
+  document.getElementById('modalSalon').textContent    = selectedSlot.salon;
+  document.getElementById('modalDatetime').textContent = selectedSlot.display;
+  document.getElementById('modalMenu').textContent     = selectedSlot.menu;
+  document.getElementById('modalPrice').textContent    = selectedSlot.price;
   document.getElementById('inputName').value  = '';
   document.getElementById('inputEmail').value = '';
   document.getElementById('modalBackdrop').classList.add('open');
@@ -240,8 +363,8 @@ function closeModal(e) {
 function confirmBooking() {
   const name  = document.getElementById('inputName').value.trim();
   const email = document.getElementById('inputEmail').value.trim();
-  if (!name)  { alert('お名前を入力してください'); return; }
-  if (!email) { alert('メールアドレスを入力してください'); return; }
+  if (!name)                { alert('お名前を入力してください'); return; }
+  if (!email)               { alert('メールアドレスを入力してください'); return; }
   if (!email.includes('@')) { alert('正しいメールアドレスを入力してください'); return; }
   if (!selectedSlot || !selectedSlot.formUrl) {
     alert('予約情報の取得に失敗しました。ページを更新してお試しください。');
