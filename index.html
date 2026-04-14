@@ -336,7 +336,7 @@ function getSlotColor(startStr) {
   const todayM = now.getMonth();
   const todayD = now.getDate();
 
-  const datePart = String(startStr).split(' ')[0];
+  const datePart = String(startStr).split(' ')[0].trim();
   const parts    = datePart.split('/');
   const slotY    = parseInt(parts[0], 10);
   const slotM    = parseInt(parts[1], 10) - 1;
