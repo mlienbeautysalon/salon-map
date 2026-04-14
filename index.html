@@ -46,6 +46,12 @@
   .section-title {
     padding: 16px 16px 8px; font-size: 12px; font-weight: 700;
     letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .area-label {
+    font-size: 11px; color: var(--gold); font-weight: 500;
+    background: rgba(201,169,110,0.1); padding: 3px 10px;
+    border-radius: 10px; margin-right: 16px;
   }
   .slot-list { padding: 0 12px 100px; display: flex; flex-direction: column; gap: 10px; }
   .slot-card { background: var(--white); border-radius: 12px; overflow: hidden; border: 1.5px solid transparent; }
@@ -132,7 +138,11 @@
 </div>
 
 <div id="map"></div>
-<div class="section-title">空き枠一覧</div>
+
+<div class="section-title">
+  <span>空き枠一覧</span>
+  <span class="area-label" id="areaLabel">エリア全体</span>
+</div>
 <div class="slot-list" id="slotList">
   <div class="loading"><div class="spinner"></div>空き枠を取得中...</div>
 </div>
@@ -176,6 +186,7 @@ const SALONS_CONFIG = [
 ];
 
 let slots             = [];
+let filteredSlots     = [];
 let selectedSlot      = null;
 let map;
 let geocoder;
@@ -191,7 +202,10 @@ function initMap() {
   });
   geocoder = new google.maps.Geocoder();
 
-  // 位置情報を自動取得
+  map.addListener('idle', () => {
+    filterSlotsByMapBounds();
+  });
+
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(
       pos => {
@@ -244,10 +258,27 @@ function searchArea() {
     if (status === 'OK' && results[0]) {
       map.setCenter(results[0].geometry.location);
       map.setZoom(13);
+      document.getElementById('areaLabel').textContent = query + '周辺';
     } else {
       alert('「' + query + '」が見つかりませんでした');
     }
   });
+}
+
+function filterSlotsByMapBounds() {
+  if (!map || slots.length === 0) return;
+  const bounds = map.getBounds();
+  if (!bounds) return;
+
+  const visibleSalonIds = SALONS_CONFIG
+    .filter(salon => bounds.contains({ lat: salon.lat, lng: salon.lng }))
+    .map(salon => salon.id);
+
+  filteredSlots = visibleSalonIds.length > 0
+    ? slots.filter(slot => visibleSalonIds.includes(slot.salonId))
+    : [];
+
+  renderSlotCards();
 }
 
 async function loadSlots() {
@@ -260,25 +291,14 @@ async function loadSlots() {
   } catch (e) {
     slots = [];
   }
-  renderSlots();
+  renderMarkers();
+  filterSlotsByMapBounds();
   const now = new Date();
   document.getElementById('lastUpdated').textContent =
     '最終更新 ' + now.getHours() + ':' + String(now.getMinutes()).padStart(2,'0');
 }
 
-function getSlotColor(startStr) {
-  const today    = new Date(); today.setHours(0,0,0,0);
-  const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
-  const parts    = String(startStr).replace(/\//g, '-').split(' ');
-  const slotDate = new Date(parts[0] + 'T00:00:00');
-  if (slotDate.getTime() === today.getTime())    return { color: '#E74C3C', label: '今日' };
-  if (slotDate.getTime() === tomorrow.getTime()) return { color: '#F39C12', label: '明日' };
-  return { color: '#2980B9', label: '明後日以降' };
-}
-
-function renderSlots() {
-  const list = document.getElementById('slotList');
-
+function renderMarkers() {
   if (window._markers) window._markers.forEach(m => m.setMap(null));
   window._markers = [];
 
@@ -308,15 +328,45 @@ function renderSlots() {
     marker.addListener('click', () => infoWindow.open(map, marker));
     window._markers.push(marker);
   });
+}
 
-  if (slots.length === 0) {
+function getSlotColor(startStr) {
+  const now    = new Date();
+  const todayY = now.getFullYear();
+  const todayM = now.getMonth();
+  const todayD = now.getDate();
+
+  const datePart = String(startStr).split(' ')[0];
+  const parts    = datePart.split('/');
+  const slotY    = parseInt(parts[0], 10);
+  const slotM    = parseInt(parts[1], 10) - 1;
+  const slotD    = parseInt(parts[2], 10);
+
+  const diffDays = Math.round(
+    (new Date(slotY, slotM, slotD) - new Date(todayY, todayM, todayD)) / 86400000
+  );
+
+  if (diffDays === 0) return { color: '#E74C3C', label: '今日' };
+  if (diffDays === 1) return { color: '#F39C12', label: '明日' };
+  return { color: '#2980B9', label: '明後日以降' };
+}
+
+function renderSlotCards() {
+  const list = document.getElementById('slotList');
+
+  if (filteredSlots.length === 0) {
+    const hasAnySlot = slots.length > 0;
     list.innerHTML =
       '<div class="empty-state"><div class="empty-icon">📅</div>' +
-      '<div class="empty-text">現在空き枠はありません。<br>またのご確認をお待ちしています。</div></div>';
+      '<div class="empty-text">' +
+      (hasAnySlot
+        ? 'このエリアに空き枠はありません。<br>検索バーで別のエリアを探してみてください。'
+        : '現在空き枠はありません。<br>またのご確認をお待ちしています。') +
+      '</div></div>';
     return;
   }
 
-  list.innerHTML = slots.map((slot, i) => {
+  list.innerHTML = filteredSlots.map((slot, i) => {
     const c = getSlotColor(slot.start);
     return (
       '<div class="slot-card" onclick="openModal(' + i + ')">' +
@@ -343,7 +393,7 @@ function renderSlots() {
 }
 
 function openModal(index) {
-  selectedSlot = slots[index];
+  selectedSlot = filteredSlots[index];
   document.getElementById('modalSalon').textContent    = selectedSlot.salon;
   document.getElementById('modalDatetime').textContent = selectedSlot.display;
   document.getElementById('modalMenu').textContent     = selectedSlot.menu;
