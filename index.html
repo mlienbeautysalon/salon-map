@@ -93,6 +93,7 @@
   .modal {
     background: var(--white); width: 100%; max-width: 480px;
     border-radius: 20px 20px 0 0; padding: 28px 20px 40px;
+    position: relative;
   }
   .modal-handle { width: 36px; height: 4px; background: var(--border); border-radius: 2px; margin: 0 auto 20px; }
   .modal-title { font-size: 18px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
@@ -114,8 +115,38 @@
     width: 100%; background: var(--gold); color: var(--black); border: none;
     padding: 16px; font-size: 15px; font-weight: 700; border-radius: 12px;
     cursor: pointer; margin-top: 8px; font-family: inherit;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
   }
+  .confirm-btn:disabled { background: #ccc; cursor: not-allowed; }
   .cancel-link { display: block; text-align: center; color: var(--muted); font-size: 13px; margin-top: 14px; cursor: pointer; }
+
+  /* 完了画面 */
+  .complete-screen {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7); z-index: 300;
+    align-items: center; justify-content: center;
+  }
+  .complete-screen.open { display: flex; }
+  .complete-card {
+    background: var(--white); border-radius: 20px;
+    padding: 40px 28px; max-width: 340px; width: 90%;
+    text-align: center;
+  }
+  .complete-icon { font-size: 56px; margin-bottom: 16px; }
+  .complete-title { font-size: 22px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+  .complete-msg { font-size: 13px; color: var(--muted); line-height: 1.7; margin-bottom: 20px; }
+  .complete-detail {
+    background: var(--cream); border-radius: 10px;
+    padding: 16px; margin-bottom: 24px; text-align: left;
+  }
+  .complete-row { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; }
+  .complete-row .label { color: var(--muted); }
+  .complete-row .value { font-weight: 700; color: var(--text); }
+  .complete-close {
+    width: 100%; background: var(--gold); color: var(--black); border: none;
+    padding: 14px; font-size: 14px; font-weight: 700; border-radius: 10px;
+    cursor: pointer; font-family: inherit;
+  }
 </style>
 </head>
 <body>
@@ -147,6 +178,7 @@
   <div class="loading"><div class="spinner"></div>空き枠を取得中...</div>
 </div>
 
+<!-- 予約モーダル -->
 <div class="modal-backdrop" id="modalBackdrop" onclick="closeModal(event)">
   <div class="modal">
     <div class="modal-handle"></div>
@@ -166,8 +198,26 @@
       <label class="form-label">メールアドレス（必須）</label>
       <input class="form-input" type="email" id="inputEmail" placeholder="example@email.com" autocomplete="email">
     </div>
-    <button class="confirm-btn" onclick="confirmBooking()">予約フォームへ進む →</button>
+    <button class="confirm-btn" id="confirmBtn" onclick="confirmBooking()">予約を確定する ✓</button>
     <span class="cancel-link" onclick="closeModal()">キャンセル</span>
+  </div>
+</div>
+
+<!-- 完了画面 -->
+<div class="complete-screen" id="completeScreen">
+  <div class="complete-card">
+    <div class="complete-icon">🎉</div>
+    <div class="complete-title">予約完了！</div>
+    <div class="complete-msg">予約確認メールをお送りしました。<br>ご確認ください。</div>
+    <div class="complete-detail">
+      <div class="complete-row"><span class="label">サロン</span><span class="value" id="compSalon">-</span></div>
+      <div class="complete-row"><span class="label">お名前</span><span class="value" id="compName">-</span></div>
+      <div class="complete-row"><span class="label">メニュー</span><span class="value" id="compMenu">-</span></div>
+      <div class="complete-row"><span class="label">日時</span><span class="value" id="compDatetime">-</span></div>
+      <div class="complete-row"><span class="label">料金</span><span class="value" id="compPrice">-</span></div>
+      <div class="complete-row"><span class="label">受付番号</span><span class="value" id="compBookingId">-</span></div>
+    </div>
+    <button class="complete-close" onclick="closeComplete()">閉じる</button>
   </div>
 </div>
 
@@ -340,14 +390,12 @@ function getSlotColor(startStr) {
   const s = String(startStr);
 
   if (s.includes('T') || (s.includes('-') && !s.includes('/'))) {
-    // UTC形式（2026-04-14T14:00:00.000Z）→ 日本時間に変換
     const d   = new Date(s);
     const jst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
     slotY = jst.getUTCFullYear();
     slotM = jst.getUTCMonth();
     slotD = jst.getUTCDate();
   } else {
-    // 通常形式（2026/04/14 23:00）
     const datePart = s.split(' ')[0].trim();
     const parts    = datePart.split('/');
     slotY = parseInt(parts[0], 10);
@@ -413,6 +461,9 @@ function openModal(index) {
   document.getElementById('modalPrice').textContent    = selectedSlot.price;
   document.getElementById('inputName').value  = '';
   document.getElementById('inputEmail').value = '';
+  const btn = document.getElementById('confirmBtn');
+  btn.disabled = false;
+  btn.textContent = '予約を確定する ✓';
   document.getElementById('modalBackdrop').classList.add('open');
 }
 
@@ -423,21 +474,66 @@ function closeModal(e) {
   }
 }
 
-function confirmBooking() {
+async function confirmBooking() {
   const name  = document.getElementById('inputName').value.trim();
   const email = document.getElementById('inputEmail').value.trim();
   if (!name)                { alert('お名前を入力してください'); return; }
   if (!email)               { alert('メールアドレスを入力してください'); return; }
   if (!email.includes('@')) { alert('正しいメールアドレスを入力してください'); return; }
-  if (!selectedSlot || !selectedSlot.formUrl) {
-    alert('予約情報の取得に失敗しました。ページを更新してお試しください。');
-    return;
+  if (!selectedSlot)        { alert('予約情報の取得に失敗しました。ページを更新してお試しください。'); return; }
+
+  const btn = document.getElementById('confirmBtn');
+  btn.disabled    = true;
+  btn.textContent = '送信中...';
+
+  try {
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({
+        name,
+        email,
+        slotId:    selectedSlot.id,
+        menu:      selectedSlot.menu,
+        datetime:  selectedSlot.display,
+        price:     selectedSlot.price,
+        salonName: selectedSlot.salon,
+        lineUserId: ''
+      })
+    });
+
+    const data = await res.json();
+
+    if (data.status === 'ok') {
+      document.getElementById('modalBackdrop').classList.remove('open');
+      document.getElementById('compSalon').textContent     = selectedSlot.salon;
+      document.getElementById('compName').textContent      = name + ' 様';
+      document.getElementById('compMenu').textContent      = selectedSlot.menu;
+      document.getElementById('compDatetime').textContent  = selectedSlot.display;
+      document.getElementById('compPrice').textContent     = selectedSlot.price;
+      document.getElementById('compBookingId').textContent = data.bookingId || '-';
+      document.getElementById('completeScreen').classList.add('open');
+      await loadSlots();
+    } else if (data.status === 'full') {
+      alert('申し訳ありません。この枠はすでに予約が入っておりました。他の枠をお選びください。');
+      btn.disabled    = false;
+      btn.textContent = '予約を確定する ✓';
+      await loadSlots();
+    } else {
+      alert('エラーが発生しました。もう一度お試しください。');
+      btn.disabled    = false;
+      btn.textContent = '予約を確定する ✓';
+    }
+  } catch (err) {
+    alert('通信エラーが発生しました。もう一度お試しください。');
+    btn.disabled    = false;
+    btn.textContent = '予約を確定する ✓';
   }
-  let url = selectedSlot.formUrl;
-  url += '&entry.1260934485=' + encodeURIComponent(name);
-  url += '&entry.254438459='  + encodeURIComponent(email);
-  document.getElementById('modalBackdrop').classList.remove('open');
-  window.location.href = url;
+}
+
+function closeComplete() {
+  document.getElementById('completeScreen').classList.remove('open');
+  selectedSlot = null;
 }
 
 function escHtml(str) {
