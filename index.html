@@ -490,17 +490,17 @@ async function confirmBooking() {
     const res = await fetch(API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({
+     body: JSON.stringify({
         name,
         email,
         slotId:    selectedSlot.id,
+        salonId:   selectedSlot.salonId,
         menu:      selectedSlot.menu,
         datetime:  selectedSlot.display,
         price:     selectedSlot.price,
         salonName: selectedSlot.salon,
         lineUserId: ''
-      })
-    });
+      })    });
 
     const data = await res.json();
 
